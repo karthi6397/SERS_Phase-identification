@@ -1,47 +1,58 @@
-# Microalgal Biomass Forecasting: A Comparative Modeling Framework
+# Deep Learning Models for Microalgal Growth-Phase Classification from SERS Spectral Data
 
-This repository contains a comparative implementation of seven forecasting approaches — classical statistical, machine learning, deep learning, and physics-informed — applied to time-series prediction of microalgal biomass concentration (dry cell weight, mg/L) in a photobioreactor/cultivation setting.
+Supplementary code for classifying microalgal growth phase (**Lag**, **Log**, **Stationary**) from Surface-Enhanced Raman Spectroscopy (SERS) spectra using four deep learning architectures, evaluated under a common train/validation/test protocol with a follow-up robustness analysis across multiple split ratios.
 
-## Overview
+## Models Implemented
 
-Accurate short- and medium-horizon forecasting of biomass growth is central to intelligent process control in microalgal cultivation. This codebase benchmarks the following models on the same biomass time series to compare predictive accuracy, generalization, and interpretability trade-offs:
+| # | Model | Framework | Section |
+|---|-------|-----------|---------|
+| 1 | Autoencoder (unsupervised feature extraction) + feed-forward classifier | TensorFlow / Keras | `Section 1` |
+| 2 | 1D Convolutional Neural Network (1D-CNN) | PyTorch | `Section 2` |
+| 3 | 1D Residual Network (1D-ResNet) | PyTorch | `Section 3` |
+| 4 | Transformer Encoder | PyTorch | `Section 4` |
 
-| # | Model | Category | Notes |
-|---|-------|----------|-------|
-| 1 | ARIMA | Classical statistical | Order (1,1,3); includes iterative multi-step rolling forecast variant |
-| 2 | LSTM | Deep learning (RNN) | Single-layer LSTM on min-max scaled univariate sequence |
-| 3 | XGBoost | Gradient-boosted trees | Lag features, rolling mean, and FFT-derived seasonality features; hyperparameters tuned via `GridSearchCV` |
-| 4 | Prophet | Additive statistical | Includes changepoint tuning and time-series cross-validation (`cross_validation`, `performance_metrics`) |
-| 5 | PINN | Physics-informed deep learning | Neural network constrained by a Monod-kinetics ODE residual (learnable `mu_max`, `K_s`) |
-| 6 | RVFL | Randomized neural network | Custom NumPy implementation (random-weight hidden layer + closed-form ridge output layer) |
-| 7 | Transformer | Deep learning (attention) | Implemented via [Darts](https://unit8co.github.io/darts/) `TransformerModel` |
-
-A Friedman test is included to assess whether replicate measurements (e.g., biological/technical replicates of dry cell weight) differ significantly, which is relevant for validating the reliability of the ground-truth data feeding the forecasts.
-
-## Repository Structure
-
-```
-.
-├── Python_codes.ipynb        # Main notebook: all seven models + evaluation + Friedman test
-├── data/                     # (add) input CSVs — see "Data" section
-├── results/                  # (add) output figures and prediction/residual spreadsheets
-├── requirements.txt          # (add) Python dependencies
-└── README.md
-```
-
-> The notebook is organized into clearly labeled sections (`### ARIMA`, `### LSTM`, `### XGBoost`, `### Prophet`, `### PINN`, `### RVFL`, `### Transformers model`, `### Sensitivity`) using raw markdown cells, followed by a `## Supporting files` block with Prophet cross-validation and the Friedman test.
+Each section is **self-contained** — it can be run independently, provided `Merged_1_PL.csv` is present in the working directory and the relevant dependencies are installed.
 
 ## Data
 
-The notebook expects three input files (paths are currently hardcoded to a local Windows environment and **should be updated to relative paths before use**):
+**Input file:** `Merged_1_PL.csv` — a SERS spectral intensity matrix. Columns are named `Day<N>_Sample<M>`, identifying the cultivation day (`N`) and biological replicate (`M`) for each spectrum.
 
-| File | Used by | Expected columns |
-|------|---------|-------------------|
-| `Primary data_Timeseries.csv` | ARIMA, LSTM, XGBoost, PINN, RVFL, Transformer | `Hours`, `Biomass` (mg/L) |
-| `prophet.csv` | Prophet | `Days` (datetime), `Biomass` |
-| `stat.csv` | Friedman test | `DCW value 1`, `DCW value 2`, `DCW value 3` (replicate measurements) |
+**Label assignment** (from acquisition day):
 
-Missing values are handled via linear interpolation (`df.interpolate(method='linear', axis=0)`) prior to modeling. Raw data is not included in this repository — add your own files under `data/` and update the file paths in the notebook accordingly.
+| Growth phase | Day range | Label |
+|---|---|---|
+| Lag | day ≤ 8 | 0 |
+| Log | 9 ≤ day ≤ 20 | 1 |
+| Stationary | day > 20 | 2 |
+
+The raw data file is not included in this repository — place your own `Merged_1_PL.csv` in the working directory before running any section.
+
+## Preprocessing (applied consistently across all four models)
+
+1. **Savitzky–Golay filtering** — window length 25, polynomial order 2, 1st derivative
+2. **Standard Normal Variate (SNV)** normalization
+3. **Z-score standardization** (`StandardScaler`), where used
+
+## Evaluation Protocol
+
+- **Primary split:** 70:15:15 (train:validation:test), stratified by class, `random_state = 42`
+- **Robustness analysis:** each model is re-trained and re-evaluated across seven additional train:test split ratios — 50:50, 60:40, 65:35, 70:30, 75:25, 80:20, 90:10 — to assess sensitivity to sample size
+- **Reproducibility:** all random seeds fixed at `SEED = 42` (Python, NumPy, TensorFlow, and PyTorch, including CUDA/cuDNN determinism flags where applicable)
+
+## Outputs
+
+Each section exports:
+
+**Quantitative results (Excel)**
+- Accuracy, macro-averaged precision/recall/F1, Cohen's kappa
+- ROC curve data (FPR/TPR per class, per split)
+- Per-epoch training/validation loss and accuracy
+- Training time, test/inference time, and peak memory usage (via `psutil`)
+- Per-split-ratio performance tables from the robustness analysis (one workbook per ratio)
+
+**Figures (PNG, 300–400 dpi)**
+- Confusion matrix (test set, publication-styled with `seaborn`)
+- Accuracy/loss vs. epoch curves
 
 ## Installation
 
@@ -53,56 +64,40 @@ source venv/bin/activate      # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Core dependencies
+### Dependencies
 
 ```
 numpy
 pandas
+scipy
+scikit-learn
 matplotlib
 seaborn
-scikit-learn
-scipy
-statsmodels
-prophet
-xgboost
-tensorflow          # for keras LSTM
-torch                # for the PINN
-darts                # for the Transformer model
+psutil
+tqdm                # used in Section 2
+tensorflow          # Section 1 (autoencoder + classifier)
+torch                # Sections 2–4 (CNN, ResNet, Transformer)
+openpyxl             # Excel export (Section 4)
+xlsxwriter           # Excel export (Section 1)
 ```
 
-Pin exact versions in `requirements.txt` once your environment is finalized, to keep results reproducible — Prophet, Darts, and TensorFlow/PyTorch version mismatches are a common source of silent behavior changes.
+Pin exact versions in `requirements.txt` once your environment is finalized — TensorFlow/PyTorch version drift is a common source of non-reproducible results even with fixed seeds.
 
 ## Usage
 
-1. Place the three input CSVs under `data/` and update the `pd.read_csv(...)` paths in each model section of `Python_codes.ipynb`.
-2. Run the notebook top to bottom, or execute individual model sections independently — each section (ARIMA, LSTM, XGBoost, Prophet, PINN, RVFL, Transformer) is self-contained after the shared import/preprocessing cells.
-3. Each model section:
-   - Fits the model on a train/test split (last 195 hours held out as the test set in most sections),
-   - Generates forecast plots (saved as `.png`, 400 dpi),
-   - Computes MAE, RMSE, and MAPE on train and test sets,
-   - Exports actual-vs-predicted values and residuals to `.xlsx`.
-4. Update the `plt.savefig(...)` and `.to_excel(...)` paths to point to a local `results/` directory.
+1. Place THE DATASET in the working directory.
+2. Run each of the four sections (independently or in sequence). Each section:
+   - Loads and preprocesses the spectra,
+   - Trains on the 70:15:15 split and exports metrics/plots for that split,
+   - Re-runs training across the seven additional split ratios and exports one Excel file per ratio.
 
-## Evaluation Metrics
+## Notes on Model Architectures
 
-All models are assessed using:
-- **MAE** — Mean Absolute Error
-- **RMSE** — Root Mean Squared Error
-- **MAPE** — Mean Absolute Percentage Error (custom implementation, since `sklearn`'s MAPE was not used directly)
+- **Autoencoder + classifier:** a 3-layer encoder (256 → 128 → 64) trained to reconstruct input spectra (MSE loss), followed by a separately trained feed-forward classifier (128 → 64 → 32 → 3, softmax) on the learned 64-dimensional embedding.
+- **1D-CNN:** two convolutional blocks (32, 64 filters, kernel size 5) with max-pooling, followed by a fully connected head.
+- **1D-ResNet:** three residual blocks (32 → 64 → 128 channels) with skip connections and stride-2 downsampling, global average pooling, and a linear classification head.
+- **Transformer encoder:** a single-layer `TransformerEncoder` (d_model = 64, 4 attention heads, feed-forward dim = 128) operating on the whole spectrum as a single token, followed by a 2-layer classification head. Robustness here is assessed via 5-fold stratified cross-validation rather than the split-ratio sweep used in the other three sections.
 
-Train and test metrics are reported separately to flag overfitting.
-
-## Statistical Validation
-
-The Friedman test (`scipy.stats.friedmanchisquare`) is applied to biological/technical replicate dry cell weight values (`stat.csv`) to test for significant differences among replicates (α = 0.05), supporting the reliability of the biomass measurements used to train and evaluate the forecasting models.
-
-## Known Limitations / To-Do Before Publishing the Repository
-
-- **Hardcoded local paths**: all `pd.read_csv` and `plt.savefig` calls reference local Windows directories (e.g., `C:\Users\karth\...`) and must be replaced with relative paths (e.g., `data/...`, `results/...`) for the repository to run on another machine.
-- **Duplicate import cells**: the import/preprocessing block appears twice at the top of the notebook; consider consolidating.
-- **No `requirements.txt` / `environment.yml` yet**: add one with pinned versions for reproducibility.
-- **Random seeds**: seeds are set for XGBoost/TensorFlow/NumPy in the XGBoost section but not uniformly across all models (e.g., RVFL, LSTM) — consider standardizing for full reproducibility across models.
-- **RVFL and PINN train/test evaluation** use a single split each; k-fold or walk-forward cross-validation would strengthen the comparison, consistent with the cross-validation already used for Prophet.
 
 
 ## Contact
