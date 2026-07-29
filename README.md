@@ -104,23 +104,6 @@ The Friedman test (`scipy.stats.friedmanchisquare`) is applied to biological/tec
 - **Random seeds**: seeds are set for XGBoost/TensorFlow/NumPy in the XGBoost section but not uniformly across all models (e.g., RVFL, LSTM) — consider standardizing for full reproducibility across models.
 - **RVFL and PINN train/test evaluation** use a single split each; k-fold or walk-forward cross-validation would strengthen the comparison, consistent with the cross-validation already used for Prophet.
 
-## Citation
-
-If this code supports a publication, add a citation block here once the associated manuscript/preprint is available, e.g.:
-
-```
-@article{yourname_year,
-  title   = {},
-  author  = {},
-  journal = {},
-  year    = {},
-  doi     = {}
-}
-```
-
-## License
-
-Specify a license (e.g., MIT, Apache-2.0) before making the repository public. Add a `LICENSE` file at the repository root.
 
 ## Contact
 
